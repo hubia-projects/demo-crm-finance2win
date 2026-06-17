@@ -4,6 +4,7 @@
   const STORAGE_KEY = "f2w_demo_state";
   const SETTINGS_KEY = "f2w_demo_settings";
   const phases = ["Contacto", "Proposta", "Contrato / APV", "Encerrado"];
+  const modalityOptions = ["Particular", "Empresa", "Viatura nova", "Viatura usada", "Refinanciamento", "Sem entrada"];
   const statuses = [
     "Novo contacto",
     "Contactado",
@@ -75,12 +76,21 @@
       amount: p[4],
       bank: p[5],
       product: p[6],
+      service: p[6],
+      creditType: p[6],
+      modality: modalityOptions[index % modalityOptions.length],
       vehicle: vehicles[index % vehicles.length],
       term: [36, 48, 60, 72, 84][index % 5],
       responsibleId: users[(index % 4) + 1].id,
       updatedAt: `2026-06-${String(2 + index).padStart(2, "0")}`,
+      openedAt: `2026-05-${String(10 + index).padStart(2, "0")}`,
+      analysisAt: ["Proposta", "Contrato / APV", "Encerrado"].includes(p[2]) ? `2026-06-${String(1 + index).padStart(2, "0")}` : "",
+      documentDeadline: p[3] === "Novos elementos" ? `2026-06-${String(15 + index).padStart(2, "0")}` : "",
+      contractAt: ["Contrato / APV", "Encerrado"].includes(p[2]) ? `2026-06-${String(8 + index).padStart(2, "0")}` : "",
+      closedAt: p[2] === "Encerrado" ? `2026-06-${String(18 + index).padStart(2, "0")}` : "",
       origin: index % 3 === 0 ? "Website" : "Contacto direto",
       closeReason: p[2] === "Encerrado" ? (p[3].includes("com") ? "Contrato concluído" : "Cliente sem interesse") : "",
+      notes: p[3] === "Novos elementos" ? "A aguardar documentação complementar do cliente." : "Processo fictício acompanhado na demonstração.",
       history: [
         { date: `2026-05-${String(10 + index).padStart(2, "0")}`, user: "Sistema demo", text: "Processo criado em ambiente de demonstração." },
         { date: `2026-06-${String(2 + index).padStart(2, "0")}`, user: users[(index % 4) + 1].name, text: `Estado atualizado para ${p[3]}.` }
@@ -196,14 +206,56 @@
       emailTemplate: "Olá {{nome}}, a sua proposta foi aprovada. Esta é uma simulação.",
       myCloudUrl: "https://my-cloud.example/demo",
       websiteUrl: "https://finance2win.example/formulario",
-      defaultResponsibleId: "u3"
+      defaultResponsibleId: "u3",
+      currentUserId: "u1"
+    };
+  }
+
+  function normalizeState(raw) {
+    const base = defaultState();
+    const input = raw || {};
+    return {
+      ...base,
+      ...input,
+      session: Boolean(input.session),
+      clients: (input.clients || base.clients).map((item, index) => ({
+        ...base.clients[index % base.clients.length],
+        ...item
+      })),
+      users: input.users || base.users,
+      processes: (input.processes || base.processes).map((item, index) => ({
+        ...base.processes[index % base.processes.length],
+        ...item,
+        service: item.service || item.product || base.processes[index % base.processes.length].service,
+        creditType: item.creditType || item.product || base.processes[index % base.processes.length].creditType,
+        modality: item.modality || base.processes[index % base.processes.length].modality,
+        openedAt: item.openedAt || item.updatedAt || base.processes[index % base.processes.length].openedAt,
+        analysisAt: item.analysisAt || "",
+        documentDeadline: item.documentDeadline || "",
+        contractAt: item.contractAt || "",
+        closedAt: item.closedAt || "",
+        notes: item.notes || "Processo fictício acompanhado na demonstração."
+      })),
+      proposals: (input.proposals || base.proposals).map((item, index) => ({
+        ...base.proposals[index % base.proposals.length],
+        ...item
+      })),
+      contracts: (input.contracts || base.contracts).map((item, index) => ({
+        ...base.contracts[index % base.contracts.length],
+        ...item
+      })),
+      contacts: input.contacts || base.contacts,
+      documents: input.documents || base.documents,
+      websiteSubmissions: input.websiteSubmissions || base.websiteSubmissions,
+      auditLogs: input.auditLogs || base.auditLogs,
+      permissions: input.permissions || base.permissions
     };
   }
 
   function loadState() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : defaultState();
+      return stored ? normalizeState(JSON.parse(stored)) : defaultState();
     } catch (error) {
       console.warn("Estado demo inválido. A repor dados.", error);
       return defaultState();
@@ -213,7 +265,7 @@
   function loadSettings() {
     try {
       const stored = localStorage.getItem(SETTINGS_KEY);
-      return stored ? JSON.parse(stored) : defaultSettings();
+      return stored ? { ...defaultSettings(), ...JSON.parse(stored) } : defaultSettings();
     } catch (error) {
       return defaultSettings();
     }
@@ -254,11 +306,58 @@
 
   function client(id) { return state.clients.find((item) => item.id === id) || {}; }
   function user(id) { return state.users.find((item) => item.id === id) || {}; }
+  function currentUser() { return user(settings.currentUserId) || state.users[0] || {}; }
   function processItem(id) { return state.processes.find((item) => item.id === id) || {}; }
   function proposal(id) { return state.proposals.find((item) => item.id === id) || {}; }
   function contract(id) { return state.contracts.find((item) => item.id === id) || {}; }
   function contact(id) { return state.contacts.find((item) => item.id === id) || {}; }
   function documentItem(id) { return state.documents.find((item) => item.id === id) || {}; }
+
+  function defaultStatusForPhase(phase) {
+    return {
+      "Contacto": "Novo contacto",
+      "Proposta": "Em análise",
+      "Contrato / APV": "Contrato em preparação",
+      "Encerrado": "Encerrado com contrato"
+    }[phase] || "Novo contacto";
+  }
+
+  function phaseForStatus(status) {
+    if (["Em análise", "Novos elementos", "Aprovada", "Recusada"].includes(status)) return "Proposta";
+    if (["Contrato em preparação", "Contrato enviado", "Assinado"].includes(status)) return "Contrato / APV";
+    if (["Encerrado com contrato", "Encerrado sem contrato"].includes(status)) return "Encerrado";
+    return "Contacto";
+  }
+
+  function importantDatesText(item) {
+    const rows = [
+      item.openedAt ? `Abertura: ${item.openedAt}` : "",
+      item.analysisAt ? `Análise: ${item.analysisAt}` : "",
+      item.documentDeadline ? `Documentação: ${item.documentDeadline}` : "",
+      item.contractAt ? `Contrato: ${item.contractAt}` : "",
+      item.closedAt ? `Encerramento: ${item.closedAt}` : ""
+    ].filter(Boolean);
+    return rows.length ? rows.join("<br>") : "Sem datas registadas";
+  }
+
+  function mainProcessForClient(clientId) {
+    const items = state.processes.filter((item) => item.clientId === clientId);
+    const active = items.find((item) => item.phase !== "Encerrado");
+    return active || items[0] || null;
+  }
+
+  function processContacts(processId) {
+    return state.contacts.filter((item) => item.processId === processId);
+  }
+
+  function flowBucket(item) {
+    if (item.status === "Encerrado com contrato") return "Encerrado com contrato";
+    if (item.status === "Encerrado sem contrato") return "Encerrado sem contrato";
+    if (item.status === "Novos elementos") return "Novos elementos/documentação";
+    if (["Contrato em preparação", "Contrato enviado", "Assinado", "Aprovada"].includes(item.status) || item.phase === "Contrato / APV") return "Aprovação / Contrato";
+    if (item.status === "Em análise") return "Análise";
+    return "Contacto inicial";
+  }
 
   function statusClass(status) {
     if (!status) return "neutral";
@@ -339,7 +438,7 @@
         const active = routePath === href || (href !== "/dashboard" && routePath.startsWith(href + "/"));
         return `<a class="nav-link ${active ? "active" : ""}" href="#${href}"><span class="nav-icon">${icon}</span><span class="nav-text">${esc(text)}</span></a>`;
       }).join("")}</div>`).join("")}</nav>
-      <div class="sidebar-footer"><a class="user-mini" href="#/perfil"><span class="avatar">AM</span><span class="user-text"><strong>António Marques</strong><br><small>Administrador demo</small></span></a></div>
+      <div class="sidebar-footer"><a class="user-mini" href="#/perfil"><span class="avatar">${esc((currentUser().name || "Demo").split(" ").map((part) => part[0]).slice(0, 2).join(""))}</span><span class="user-text"><strong>${esc(currentUser().name || "Utilizador demo")}</strong><br><small>${esc(currentUser().role || "Perfil demo")}</small></span></a></div>
     </aside>`;
   }
 
@@ -351,6 +450,9 @@
         <input id="global-search" placeholder="Pesquisar nome, NIF, email, telefone, processo ou proposta">
         <div id="search-results" class="search-results" hidden></div>
       </div>
+      <select id="current-user-switch" title="Utilizador demo ativo">
+        ${state.users.map((item) => `<option value="${esc(item.id)}" ${item.id === settings.currentUserId ? "selected" : ""}>${esc(item.name)} · ${esc(item.role)}</option>`).join("")}
+      </select>
       <a class="btn small" href="#/clientes/novo">+ Novo</a>
       <button class="btn small secondary" type="button" data-action="notify">Notificações</button>
       <span class="demo-pill">Modo demonstração</span>
@@ -369,7 +471,7 @@
 
   function renderLogin() {
     return authLayout("Entrar", "Autenticação simulada para apresentar o fluxo inicial.", `<form data-form="login" class="grid">
-      ${fields({}, [{ label: "Email", name: "email", type: "email", value: "demo@finance2win.pt" }, { label: "Palavra-passe", name: "password", type: "password", value: "demo123" }])}
+      ${fields({ currentUserId: settings.currentUserId }, [{ label: "Email", name: "email", type: "email", value: "demo@finance2win.pt" }, { label: "Palavra-passe", name: "password", type: "password", value: "demo123" }, { label: "Entrar como", name: "currentUserId", type: "select", options: state.users.map((item) => ({ value: item.id, label: `${item.name} · ${item.role}` })) }])}
       <label><input type="checkbox" checked> Manter sessão</label>
       <button class="btn" type="submit">Entrar</button>
       <a href="#/recuperar-password">Recuperar palavra-passe</a>
@@ -403,11 +505,13 @@
       ["Processos encerrados", state.processes.filter((p) => p.phase === "Encerrado").length, "/encerrados"]
     ];
     const byPhase = phases.map((phase) => [phase, state.processes.filter((p) => p.phase === phase).length]);
+    const flowRows = ["Contacto inicial", "Análise", "Novos elementos/documentação", "Aprovação / Contrato", "Encerrado com contrato", "Encerrado sem contrato"].map((label) => [label, state.processes.filter((item) => flowBucket(item) === label).length]);
     const recentRows = state.processes.slice(0, 6).map((p) => `<tr><td><a href="#/processos/${p.id}">${esc(p.number)}</a></td><td>${esc(client(p.clientId).name)}</td><td>${esc(p.phase)}</td><td>${badge(p.status)}</td><td>${esc(user(p.responsibleId).name)}</td></tr>`);
     return pageHeader("Dashboard geral", "Indicadores fictícios para validar o dia a dia operacional.", `${button("Novo cliente", "/clientes/novo")} ${button("Novo processo", "/processos/novo", "secondary")}`)
       + `<div class="grid cols-6">${stats.map(([label, value, href]) => `<a class="card stat-card" href="#${href}"><div class="stat-label">${esc(label)}</div><div class="stat-value">${value}</div><div class="stat-hint">Abrir módulo</div></a>`).join("")}</div>`
-      + `<div class="grid cols-2" style="margin-top:14px">${card("Processos por fase", bars(byPhase))}${card("Processos por responsável", bars(state.users.map((u) => [u.name, state.processes.filter((p) => p.responsibleId === u.id).length]).filter(([, n]) => n > 0)))}</div>`
-      + `<div class="grid cols-2" style="margin-top:14px">${card("Últimas atividades", timeline(state.auditLogs.slice(0, 4).map((a) => ({ date: a.date, user: a.user, text: `${a.action} em ${a.module}` }))))}${card("Processos recentes", dataTable(["Processo", "Cliente", "Fase", "Estado", "Responsável"], recentRows))}</div>`;
+      + `<div class="grid cols-2" style="margin-top:14px">${card("Processos por fase", bars(byPhase))}${card("Fluxo operacional", bars(flowRows))}</div>`
+      + `<div class="grid cols-2" style="margin-top:14px">${card("Processos por responsável", bars(state.users.map((u) => [u.name, state.processes.filter((p) => p.responsibleId === u.id).length]).filter(([, n]) => n > 0)))}${card("Últimas atividades", timeline(state.auditLogs.slice(0, 4).map((a) => ({ date: a.date, user: a.user, text: `${a.action} em ${a.module}` }))))}</div>`
+      + `<div class="grid cols-2" style="margin-top:14px">${card("Processos recentes", dataTable(["Processo", "Cliente", "Fase", "Estado", "Responsável"], recentRows))}${card("Acesso multiutilizador", `<div class="notice"><strong>Utilizador ativo</strong><br>${esc(currentUser().name)} · ${esc(currentUser().role)}<br><span class="meta">Troca este contexto no seletor do topo para simular perfis diferentes.</span></div>`)}</div>`;
   }
 
   function bars(rows) {
@@ -450,11 +554,13 @@
   function renderClientDetail(id) {
     const c = client(id);
     if (!c.id) return missing("Cliente não encontrado.");
-    const tab = currentTab[`client-${id}`] || "Resumo";
-    const tabs = ["Resumo", "Dados pessoais", "Processos", "Propostas", "Contratos", "Viaturas", "Documentos", "Histórico"];
+    const tab = currentTab[`client-${id}`] || "Informações principais";
+    const tabs = ["Informações principais", "Dados pessoais", "Processos", "Propostas", "Contratos", "Viaturas", "Documentos", "Histórico"];
     const relatedProcesses = state.processes.filter((p) => p.clientId === id);
+    const main = mainProcessForClient(id);
+    const relatedContactRows = relatedProcesses.flatMap((item) => processContacts(item.id)).slice(0, 8);
     const body = {
-      "Resumo": summaryGrid([["Estado", badge(c.status)], ["Responsável", user(c.responsibleId).name], ["NIF", c.nif], ["Contacto", `${c.phone}<br>${c.email}`], ["Última atividade", c.lastActivity], ["RGPD", c.rgpd]]),
+      "Informações principais": summaryGrid([["Nome do cliente", c.name], ["NIF", c.nif], ["Contactos", c.phone || "Sem telefone"], ["Morada", c.address || "Sem morada"], ["Email", c.email || "Sem email"], ["Produto/serviço", main ? main.service : "Sem processo associado"], ["Banco", main ? main.bank : "Sem banco"], ["Tipo de crédito/processo", main ? main.creditType : "Sem tipologia"], ["Modalidade", main ? main.modality : "Sem modalidade"], ["Valor", main ? money(main.amount) : "-"], ["Prazo", main ? `${main.term} meses` : "-"], ["Observações", main ? main.notes : c.notes], ["Estado do processo", main ? badge(main.status) : badge("Sem processo")], ["Datas importantes", main ? importantDatesText(main) : "Sem datas"], ["Responsável", user(c.responsibleId).name]]) + card("Histórico de contactos", dataTable(["Data", "Tipo", "Processo", "Resultado"], relatedContactRows.map((item) => `<tr><td>${esc(item.date)}</td><td><a href="#/contactos/${item.id}">${esc(item.type)}</a></td><td><a href="#/processos/${item.processId}">${esc(processItem(item.processId).number)}</a></td><td>${esc(item.result)}</td></tr>`), "Sem histórico de contactos registado."), "spaced"),
       "Dados pessoais": summaryGrid([["Nome", c.name], ["Morada", c.address], ["Email", c.email], ["Telefone", c.phone], ["Notas", c.notes]]),
       "Processos": dataTable(["Processo", "Fase", "Estado", "Valor"], relatedProcesses.map((p) => `<tr><td><a href="#/processos/${p.id}">${esc(p.number)}</a></td><td>${esc(p.phase)}</td><td>${badge(p.status)}</td><td>${money(p.amount)}</td></tr>`)),
       "Propostas": dataTable(["Proposta", "Banco", "Estado", "Valor"], state.proposals.filter((p) => p.clientId === id).map((p) => `<tr><td><a href="#/propostas/${p.id}">${esc(p.number)}</a></td><td>${esc(p.bank)}</td><td>${badge(p.status)}</td><td>${money(p.amount)}</td></tr>`)),
@@ -489,7 +595,7 @@
         const items = state.processes.filter((p) => p.phase === phase);
         return `<section class="pipeline-col"><div class="pipeline-title"><span>${esc(phase)}</span><span>${items.length}</span></div>${items.map((p) => `<article class="pipeline-card">
           <h4><a href="#/processos/${p.id}">${esc(client(p.clientId).name)}</a></h4>
-          <div class="meta">NIF ${esc(client(p.clientId).nif)}<br>${esc(p.product)} · ${money(p.amount)}<br>${esc(user(p.responsibleId).name)} · ${esc(p.updatedAt)}</div>
+          <div class="meta">NIF ${esc(client(p.clientId).nif)}<br>${esc(p.service || p.product)} · ${money(p.amount)}<br>${esc(user(p.responsibleId).name)} · ${esc(p.updatedAt)}</div>
           <p>${badge(p.status)}</p>
           <div class="row-actions">${phaseIndex(p.phase) > 0 ? `<button class="btn small secondary" data-action="move-process" data-id="${p.id}" data-dir="-1">←</button>` : ""}${phaseIndex(p.phase) < phases.length - 1 ? `<button class="btn small secondary" data-action="move-process" data-id="${p.id}" data-dir="1">→</button>` : ""}</div>
         </article>`).join("")}</section>`;
@@ -502,21 +608,28 @@
 
   function renderProcessForm(existing) {
     const isEdit = Boolean(existing);
-    const values = existing || { clientId: state.clients[0].id, responsibleId: settings.defaultResponsibleId, phase: "Contacto", status: "Novo contacto", bank: banks[0], product: products[0], vehicle: vehicles[0], term: 60, amount: 12000 };
+    const values = existing || { clientId: state.clients[0].id, responsibleId: settings.defaultResponsibleId, phase: "Contacto", status: "Novo contacto", bank: banks[0], product: products[0], service: products[0], creditType: products[0], modality: modalityOptions[0], vehicle: vehicles[0], term: 60, amount: 12000, notes: "Novo processo em demonstração.", openedAt: "2026-06-17", analysisAt: "", documentDeadline: "", contractAt: "", closedAt: "" };
     return pageHeader(isEdit ? "Editar processo" : "Criar processo", "Dados principais do processo, produto, banco, viatura e estado.", "")
       + card("", `<form data-form="${isEdit ? "process-edit" : "process-new"}" data-id="${esc(values.id || "")}" class="grid">
         ${fields(values, [
           { label: "Cliente existente", name: "clientId", type: "select", options: state.clients.map((c) => ({ value: c.id, label: `${c.name} · ${c.nif}` })) },
           { label: "Cliente rápido (opcional)", name: "quickClient" },
           { label: "Responsável", name: "responsibleId", type: "select", options: state.users.map((u) => ({ value: u.id, label: u.name })) },
-          { label: "Tipo de crédito", name: "product", type: "select", options: products },
-          { label: "Produto", name: "modality", value: values.modality || "Produto standard" },
+          { label: "Produto/serviço", name: "service", type: "select", options: products },
+          { label: "Tipo de crédito/processo", name: "creditType", type: "select", options: products },
+          { label: "Modalidade", name: "modality", type: "select", options: modalityOptions },
           { label: "Banco", name: "bank", type: "select", options: banks },
           { label: "Viatura", name: "vehicle", type: "select", options: vehicles },
           { label: "Valor", name: "amount", type: "number" },
           { label: "Prazo", name: "term", type: "number" },
           { label: "Fase", name: "phase", type: "select", options: phases },
-          { label: "Estado inicial", name: "status", type: "select", options: statuses }
+          { label: "Estado inicial", name: "status", type: "select", options: statuses },
+          { label: "Data de abertura", name: "openedAt", type: "date" },
+          { label: "Data de análise", name: "analysisAt", type: "date" },
+          { label: "Prazo documentação", name: "documentDeadline", type: "date" },
+          { label: "Data do contrato", name: "contractAt", type: "date" },
+          { label: "Data de encerramento", name: "closedAt", type: "date" },
+          { label: "Observações", name: "notes", type: "textarea", full: true }
         ])}
         <div class="actions"><button class="btn" type="submit">Guardar processo</button><a class="btn secondary" href="#/processos">Cancelar</a></div>
       </form>`);
@@ -525,22 +638,22 @@
   function renderProcessDetail(id) {
     const p = processItem(id);
     if (!p.id) return missing("Processo não encontrado.");
-    const tab = currentTab[`process-${id}`] || "Resumo";
-    const tabs = ["Resumo", "Cliente", "Contacto", "Viatura", "Proposta", "Contrato / APV", "Documentos", "Histórico", "Encerramento"];
+    const tab = currentTab[`process-${id}`] || "Informações principais";
+    const tabs = ["Informações principais", "Cliente", "Contacto", "Viatura", "Proposta", "Contrato / APV", "Documentos", "Histórico", "Encerramento"];
     const prop = state.proposals.find((item) => item.processId === id);
     const cont = state.contracts.find((item) => item.processId === id);
     const body = {
-      "Resumo": summaryGrid([["Número", p.number], ["Cliente", client(p.clientId).name], ["NIF", client(p.clientId).nif], ["Fase", p.phase], ["Estado", badge(p.status)], ["Responsável", user(p.responsibleId).name], ["Última atualização", p.updatedAt], ["Banco", p.bank], ["Valor", money(p.amount)]]),
-      "Cliente": summaryGrid([["Nome", client(p.clientId).name], ["Email", client(p.clientId).email], ["Telefone", client(p.clientId).phone], ["NIF", client(p.clientId).nif]]),
+      "Informações principais": summaryGrid([["Nome do cliente", client(p.clientId).name], ["NIF", client(p.clientId).nif], ["Contactos", client(p.clientId).phone || "Sem telefone"], ["Morada", client(p.clientId).address || "Sem morada"], ["Email", client(p.clientId).email || "Sem email"], ["Produto/serviço", p.service || p.product], ["Banco", p.bank], ["Tipo de crédito/processo", p.creditType || p.product], ["Modalidade", p.modality || "Sem modalidade"], ["Valor", money(p.amount)], ["Prazo", `${p.term} meses`], ["Observações", p.notes || "Sem observações"], ["Estado do processo", badge(p.status)], ["Datas importantes", importantDatesText(p)], ["Responsável", user(p.responsibleId).name]]) + card("Histórico de contactos", dataTable(["Data", "Tipo", "Resultado", "Seguimento"], processContacts(id).map((item) => `<tr><td>${esc(item.date)}</td><td><a href="#/contactos/${item.id}">${esc(item.type)}</a></td><td>${esc(item.result)}</td><td>${esc(item.next || "-")}</td></tr>`), "Sem contactos registados neste processo."), "spaced"),
+      "Cliente": summaryGrid([["Nome", client(p.clientId).name], ["Email", client(p.clientId).email], ["Telefone", client(p.clientId).phone], ["Morada", client(p.clientId).address], ["NIF", client(p.clientId).nif]]),
       "Contacto": dataTable(["Tipo", "Data", "Resultado"], state.contacts.filter((c) => c.processId === id).map((c) => `<tr><td><a href="#/contactos/${c.id}">${esc(c.type)}</a></td><td>${esc(c.date)}</td><td>${esc(c.result)}</td></tr>`)),
-      "Viatura": summaryGrid([["Modelo", p.vehicle], ["Produto", p.product], ["Prazo", `${p.term} meses`], ["Valor", money(p.amount)]]),
-      "Proposta": prop ? summaryGrid([["Proposta", `<a href="#/propostas/${prop.id}">${esc(prop.number)}</a>`], ["Banco", prop.bank], ["Estado", badge(prop.status)], ["Mensalidade", money(prop.monthly)]]) : `<div class="empty-state">Sem proposta associada.</div>`,
+      "Viatura": summaryGrid([["Modelo", p.vehicle], ["Produto/serviço", p.service || p.product], ["Tipo de crédito/processo", p.creditType || p.product], ["Modalidade", p.modality || "Sem modalidade"], ["Prazo", `${p.term} meses`], ["Valor", money(p.amount)]]),
+      "Proposta": prop ? summaryGrid([["Proposta", `<a href="#/propostas/${prop.id}">${esc(prop.number)}</a>`], ["Banco", prop.bank], ["Modalidade", prop.modality || p.modality || "Sem modalidade"], ["Estado", badge(prop.status)], ["Mensalidade", money(prop.monthly)], ["Observações", prop.notes || p.notes || "Sem observações"]]) : `<div class="empty-state">Sem proposta associada.</div>`,
       "Contrato / APV": cont ? summaryGrid([["Contrato", `<a href="#/contratos/${cont.id}">${esc(cont.number)}</a>`], ["Estado", badge(cont.status)], ["Assinatura", cont.signatureType], ["Local", cont.location]]) : `<div class="empty-state">Sem contrato associado.</div>`,
       "Documentos": dataTable(["Documento", "Categoria", "Origem"], state.documents.filter((d) => d.processId === id).map((d) => `<tr><td><a href="#/documentos/${d.id}">${esc(d.name)}</a></td><td>${esc(d.category)}</td><td>${esc(d.origin)}</td></tr>`)),
       "Histórico": timeline(p.history),
       "Encerramento": summaryGrid([["Resultado final", p.phase === "Encerrado" ? p.status : "Ainda ativo"], ["Motivo", p.closeReason || "Não aplicável"], ["Responsável", user(p.responsibleId).name]])
     }[tab];
-    return pageHeader(p.number, `${client(p.clientId).name} · ${p.phase} · ${p.updatedAt}`, `${button("Editar", `/processos/${id}/editar`)} <button class="btn secondary" data-action="cycle-status" data-id="${id}">Mudar estado</button> <a class="btn secondary" href="#/contactos/novo">Adicionar contacto</a> <a class="btn secondary" href="#/documentos/novo">Adicionar documento</a>`)
+    return pageHeader(p.number, `${client(p.clientId).name} · ${p.phase} · ${p.updatedAt}`, `${button("Editar", `/processos/${id}/editar`)} <button class="btn secondary" data-action="change-status" data-id="${id}">Mudar estado</button> <a class="btn secondary" href="#/contactos/novo">Adicionar contacto</a> <a class="btn secondary" href="#/documentos/novo">Adicionar documento</a>`)
       + progress(p.phase)
       + tabsHtml(`process-${id}`, tabs, tab)
       + card("", body);
@@ -780,8 +893,9 @@
   }
 
   function renderProfile() {
+    const activeUser = currentUser();
     return pageHeader("Meu perfil", "Preferências e sessão simuladas.", `<button class="btn secondary" data-action="logout">Terminar sessão</button>`)
-      + card("", `<form data-form="profile" class="grid">${fields({ name: "António Marques", email: "antonio@finance2win.demo", image: "Placeholder", preferences: "Receber notificações de propostas aprovadas" }, [
+      + card("", `<form data-form="profile" class="grid">${fields({ name: activeUser.name || "Utilizador demo", email: activeUser.email || "demo@finance2win.pt", image: "Placeholder", preferences: "Receber notificações de propostas aprovadas" }, [
         { label: "Nome", name: "name" },
         { label: "Email", name: "email", type: "email" },
         { label: "Imagem placeholder", name: "image" },
@@ -881,7 +995,7 @@
   }
 
   function addAudit(action, module, record, before, after) {
-    state.auditLogs.unshift({ id: nextId("a", state.auditLogs), date: new Date().toLocaleString("pt-PT"), user: "António Marques", action, module, record, before, after });
+    state.auditLogs.unshift({ id: nextId("a", state.auditLogs), date: new Date().toLocaleString("pt-PT"), user: currentUser().name || "Utilizador demo", action, module, record, before, after });
   }
 
   function attachEvents() {
@@ -907,7 +1021,7 @@
         render();
       }
       if (action === "move-process") moveProcess(target.dataset.id, Number(target.dataset.dir));
-      if (action === "cycle-status") cycleStatus(target.dataset.id);
+      if (action === "change-status") showStatusModal(target.dataset.id);
       if (action === "approve-proposal") confirmApprove(target.dataset.id);
       if (action === "permission") {
         state.permissions[target.dataset.module][target.dataset.role] = target.checked;
@@ -929,6 +1043,7 @@
       if (action === "toast") toast(target.dataset.message || "Ação simulada.");
       if (action === "modal-close") closeModal();
       if (action === "confirm-approve") approveProposal(target.dataset.id);
+      if (action === "confirm-status") applyStatusChange(target.dataset.id);
     });
 
     document.addEventListener("input", (event) => {
@@ -939,13 +1054,21 @@
 
     document.addEventListener("change", (event) => {
       if (event.target && event.target.matches("[data-filter]")) applyVisualFilters();
+      if (event.target && event.target.id === "current-user-switch") {
+        settings.currentUserId = event.target.value;
+        saveSettings();
+        toast(`Utilizador ativo: ${currentUser().name}`);
+        render();
+      }
     });
   }
 
   function handleForm(type, data, id) {
     if (type === "login") {
       state.session = true;
+      settings.currentUserId = data.currentUserId || settings.currentUserId;
       saveState();
+      saveSettings();
       go("/dashboard");
       return;
     }
@@ -962,7 +1085,13 @@
     if (type === "contract-new" || type === "contract-edit") return saveContract(type, data, id);
     if (type === "document-new") return saveDocument(data);
     if (type === "user-new" || type === "user-edit") return saveUser(type, data, id);
-    if (type === "profile") return toast("Perfil guardado de forma simulada.");
+    if (type === "profile") {
+      Object.assign(currentUser(), { name: data.name, email: data.email });
+      saveState();
+      toast("Perfil guardado de forma simulada.");
+      render();
+      return;
+    }
     if (type === "settings") {
       settings = { ...settings, ...data };
       saveSettings();
@@ -1001,7 +1130,7 @@
       selectedClient = quick.id;
     }
     if (type === "process-new") {
-      const item = { id: nextId("p", state.processes), number: `F2W-2026-${String(200 + state.processes.length).padStart(4, "0")}`, updatedAt: new Date().toISOString().slice(0, 10), origin: "Manual", closeReason: "", history: [{ date: new Date().toLocaleString("pt-PT"), user: "António Marques", text: "Processo criado na demo." }], ...data, clientId: selectedClient, amount: Number(data.amount), term: Number(data.term) };
+      const item = { id: nextId("p", state.processes), number: `F2W-2026-${String(200 + state.processes.length).padStart(4, "0")}`, updatedAt: new Date().toISOString().slice(0, 10), origin: "Manual", closeReason: "", history: [{ date: new Date().toLocaleString("pt-PT"), user: currentUser().name, text: "Processo criado na demo." }], ...data, clientId: selectedClient, product: data.service || data.creditType || data.product, phase: phaseForStatus(data.status || defaultStatusForPhase(data.phase)), amount: Number(data.amount), term: Number(data.term) };
       delete item.quickClient;
       state.processes.unshift(item);
       addAudit("Criou processo", "Processos", item.number, "-", item.status);
@@ -1011,9 +1140,9 @@
       return;
     }
     const item = processItem(id);
-    Object.assign(item, data, { clientId: selectedClient, amount: Number(data.amount), term: Number(data.term), updatedAt: new Date().toISOString().slice(0, 10) });
+    Object.assign(item, data, { clientId: selectedClient, product: data.service || data.creditType || item.product, phase: phaseForStatus(data.status || item.status), amount: Number(data.amount), term: Number(data.term), updatedAt: new Date().toISOString().slice(0, 10) });
     delete item.quickClient;
-    item.history.unshift({ date: new Date().toLocaleString("pt-PT"), user: "António Marques", text: "Processo editado." });
+    item.history.unshift({ date: new Date().toLocaleString("pt-PT"), user: currentUser().name, text: "Processo editado." });
     saveState();
     toast("Processo atualizado.");
     go(`/processos/${id}`);
@@ -1099,21 +1228,41 @@
     const before = item.phase;
     item.phase = phases[next];
     item.updatedAt = new Date().toISOString().slice(0, 10);
-    if (item.phase === "Encerrado" && !item.status.includes("Encerrado")) item.status = "Encerrado com contrato";
-    item.history.unshift({ date: new Date().toLocaleString("pt-PT"), user: "António Marques", text: `Movido de ${before} para ${item.phase}.` });
+    if (!item.status || phaseForStatus(item.status) !== item.phase) item.status = defaultStatusForPhase(item.phase);
+    if (item.phase === "Proposta" && !item.analysisAt) item.analysisAt = item.updatedAt;
+    if (item.status === "Novos elementos" && !item.documentDeadline) item.documentDeadline = item.updatedAt;
+    if (item.phase === "Contrato / APV" && !item.contractAt) item.contractAt = item.updatedAt;
+    if (item.phase === "Encerrado") item.closedAt = item.updatedAt;
+    item.history.unshift({ date: new Date().toLocaleString("pt-PT"), user: currentUser().name, text: `Movido de ${before} para ${item.phase}.` });
     addAudit("Moveu processo", "Processos", item.number, before, item.phase);
     saveState();
     toast("Processo movido no pipeline.");
     render();
   }
 
-  function cycleStatus(id) {
+  function showStatusModal(id) {
     const item = processItem(id);
-    const next = statuses[(statuses.indexOf(item.status) + 1) % statuses.length];
+    if (!item.id) return;
+    showModal(`<h2>Mudar estado do processo</h2><p>Escolhe o novo estado para ${esc(item.number)}.</p><div class="field"><label>Novo estado</label><select id="status-change-select">${statuses.map((status) => `<option value="${esc(status)}" ${status === item.status ? "selected" : ""}>${esc(status)}</option>`).join("")}</select></div><div class="actions"><button class="btn" data-action="confirm-status" data-id="${esc(id)}">Guardar estado</button><button class="btn secondary" data-action="modal-close">Cancelar</button></div>`);
+  }
+
+  function applyStatusChange(id) {
+    const item = processItem(id);
+    const select = document.getElementById("status-change-select");
+    if (!item.id || !select) return;
+    const next = select.value;
     const before = item.status;
     item.status = next;
-    item.history.unshift({ date: new Date().toLocaleString("pt-PT"), user: "António Marques", text: `Estado alterado de ${before} para ${next}.` });
+    item.phase = phaseForStatus(next);
+    item.updatedAt = new Date().toISOString().slice(0, 10);
+    if (item.phase === "Proposta" && !item.analysisAt) item.analysisAt = item.updatedAt;
+    if (next === "Novos elementos" && !item.documentDeadline) item.documentDeadline = item.updatedAt;
+    if (item.phase === "Contrato / APV" && !item.contractAt) item.contractAt = item.updatedAt;
+    if (item.phase === "Encerrado") item.closedAt = item.updatedAt;
+    item.history.unshift({ date: new Date().toLocaleString("pt-PT"), user: currentUser().name, text: `Estado alterado de ${before} para ${next}.` });
+    addAudit("Alterou estado", "Processos", item.number, before, next);
     saveState();
+    closeModal();
     toast("Estado atualizado.");
     render();
   }
@@ -1131,6 +1280,7 @@
     if (p.id) {
       p.phase = "Contrato / APV";
       p.status = "Contrato em preparação";
+      p.contractAt = new Date().toISOString().slice(0, 10);
       p.history.unshift({ date: new Date().toLocaleString("pt-PT"), user: "Sistema demo", text: "Proposta aprovada. Email de aprovação enviado de forma simulada." });
     }
     addAudit("Aprovou proposta", "Propostas", prop.number, "Em análise", "Aprovada");

@@ -231,6 +231,7 @@ button {
 }
 
 .global-search input,
+.topbar select,
 .field input,
 .field select,
 .field textarea,
@@ -246,6 +247,7 @@ button {
 }
 
 .global-search input:focus,
+.topbar select:focus,
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
