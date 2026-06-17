@@ -358,7 +358,13 @@ button {
 .btn.secondary { background: #fff; color: var(--primary-dark); border-color: var(--border); }
 .btn.secondary:hover { background: var(--primary-soft); }
 .btn.danger { background: var(--danger); border-color: var(--danger); }
-.btn.small { min-height: 32px; padding: 6px 10px; font-size: 12px; }
+.btn.small { min-height: 32px; padding: 6px 12px; font-size: 12px; line-height: 1; }
+
+.topbar > .btn {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
 
 .grid {
   display: grid;
