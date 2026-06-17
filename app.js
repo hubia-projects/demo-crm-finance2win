@@ -420,13 +420,39 @@
     </div>`;
   }
 
+  function navSvg(path, extra = "") {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}${extra}</svg>`;
+  }
+
+  function navIcon(name) {
+    const icons = {
+      dashboard: navSvg('<path d="M4 13h7V4H4z"/><path d="M13 20h7v-9h-7z"/><path d="M13 11h7V4h-7z"/><path d="M4 20h7v-5H4z"/>'),
+      clients: navSvg('<path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
+      processes: navSvg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10"/><path d="M7 12h10"/><path d="M7 16h6"/>'),
+      pipeline: navSvg('<path d="M4 6h5v12H4z"/><path d="M10 6h4v12h-4z"/><path d="M15 6h5v12h-5z"/>'),
+      contacts: navSvg('<path d="M21 15a2 2 0 0 1-2 2H8l-4 3V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/><path d="M8 8h8"/><path d="M8 12h5"/>'),
+      proposals: navSvg('<path d="M8 3h8l4 4v14H8z"/><path d="M16 3v5h4"/><path d="M10 13h8"/><path d="M10 17h6"/>'),
+      contracts: navSvg('<path d="M8 3h8l4 4v14H8z"/><path d="M16 3v5h4"/><path d="M11 14l2 2 4-4"/>'),
+      closed: navSvg('<circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/>'),
+      documents: navSvg('<path d="M8 3h8l4 4v14H8z"/><path d="M16 3v5h4"/><path d="M10 13h8"/><path d="M10 17h8"/>'),
+      website: navSvg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18"/><path d="M12 3a15 15 0 0 0 0 18"/>'),
+      import: navSvg('<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>'),
+      reports: navSvg('<path d="M4 19V5"/><path d="M10 19V9"/><path d="M16 19V13"/><path d="M22 19V7"/>'),
+      audit: navSvg('<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>'),
+      users: navSvg('<path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/>'),
+      roles: navSvg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M9 5v14"/><path d="M15 9h3"/><path d="M15 13h3"/>'),
+      settings: navSvg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.82-.33 1.7 1.7 0 0 0-1 1.54V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.54 1.7 1.7 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.54-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.54-1 1.7 1.7 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.54V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.54 1.7 1.7 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.36.6.93.97 1.6 1H21a2 2 0 1 1 0 4h-.09c-.67.03-1.24.4-1.51 1z"/>')
+    };
+    return icons[name] || navSvg('<circle cx="12" cy="12" r="8"/>');
+  }
+
   function sidebar(routePath) {
     const groups = [
-      ["Visão geral", [["◎", "Dashboard", "/dashboard"]]],
-      ["Operação", [["◇", "Clientes", "/clientes"], ["▣", "Processos", "/processos"], ["▥", "Pipeline", "/processos/pipeline"], ["✉", "Contactos", "/contactos/novo"], ["₪", "Propostas", "/propostas"], ["§", "Contratos / APV", "/contratos"], ["✓", "Processos encerrados", "/encerrados"]]],
-      ["Documentação e dados", [["□", "Documentos", "/documentos"], ["⌁", "Entradas do website", "/website/submissoes"], ["⇧", "Importação Excel/CSV", "/importacoes/nova"]]],
-      ["Controlo", [["▤", "Relatórios", "/relatorios"], ["≡", "Auditoria", "/auditoria"]]],
-      ["Administração", [["○", "Utilizadores", "/utilizadores"], ["◫", "Perfis e permissões", "/perfis"], ["⚙", "Configurações", "/configuracoes"]]]
+      ["Visão geral", [["dashboard", "Dashboard", "/dashboard"]]],
+      ["Operação", [["clients", "Clientes", "/clientes"], ["processes", "Processos", "/processos"], ["pipeline", "Pipeline", "/processos/pipeline"], ["contacts", "Contactos", "/contactos/novo"], ["proposals", "Propostas", "/propostas"], ["contracts", "Contratos / APV", "/contratos"], ["closed", "Processos encerrados", "/encerrados"]]],
+      ["Documentação e dados", [["documents", "Documentos", "/documentos"], ["website", "Entradas do website", "/website/submissoes"], ["import", "Importação Excel/CSV", "/importacoes/nova"]]],
+      ["Controlo", [["reports", "Relatórios", "/relatorios"], ["audit", "Auditoria", "/auditoria"]]],
+      ["Administração", [["users", "Utilizadores", "/utilizadores"], ["roles", "Perfis e permissões", "/perfis"], ["settings", "Configurações", "/configuracoes"]]]
     ];
     return `<aside class="sidebar">
       <div class="brand">
@@ -436,7 +462,7 @@
       </div>
       <nav>${groups.map(([label, links]) => `<div class="nav-group"><div class="nav-label">${esc(label)}</div>${links.map(([icon, text, href]) => {
         const active = routePath === href || (href !== "/dashboard" && routePath.startsWith(href + "/"));
-        return `<a class="nav-link ${active ? "active" : ""}" href="#${href}"><span class="nav-icon">${icon}</span><span class="nav-text">${esc(text)}</span></a>`;
+        return `<a class="nav-link ${active ? "active" : ""}" href="#${href}"><span class="nav-icon">${navIcon(icon)}</span><span class="nav-text">${esc(text)}</span></a>`;
       }).join("")}</div>`).join("")}</nav>
       <div class="sidebar-footer"><a class="user-mini" href="#/perfil"><span class="avatar">${esc((currentUser().name || "Demo").split(" ").map((part) => part[0]).slice(0, 2).join(""))}</span><span class="user-text"><strong>${esc(currentUser().name || "Utilizador demo")}</strong><br><small>${esc(currentUser().role || "Perfil demo")}</small></span></a></div>
     </aside>`;

@@ -172,7 +172,16 @@ button {
 .nav-icon {
   width: 22px;
   flex: 0 0 22px;
-  text-align: center;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  color: #d8e6ee;
+}
+
+.nav-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
 .sidebar-footer {
